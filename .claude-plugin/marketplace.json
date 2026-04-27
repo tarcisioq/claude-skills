@@ -1,0 +1,24 @@
+{
+  "name": "tarcisio-skills",
+  "owner": {
+    "name": "Tarcísio Quaresma",
+    "email": "tarcisioq@gmail.com",
+    "url": "https://github.com/tarcisioq"
+  },
+  "metadata": {
+    "description": "Operational Claude Code skills that replace abstract principles with mechanical rules — fixing quality oscillation in code review, design, and architecture.",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "solid",
+      "source": "./solid",
+      "description": "Engineering discipline cross-language: SOLID + TDD + clean code + refactoring + design patterns + architecture + code review + legacy code + when-not-to-apply. 14 operational references with mechanical tells, decision trees, and Fowler-style refactor recipes. Examples in TypeScript; rules universal across OO languages."
+    },
+    {
+      "name": "vanilla-js-architect",
+      "source": "./vanilla-js-architect",
+      "description": "Designs and implements browser-side SDKs, libraries, and frameworks in vanilla JavaScript. Architecture, encapsulation, distribution (ESM/UMD/IIFE), and cross-runtime support (browsers, Workers, Deno, Bun, Cloudflare Workers). Modern primitives: AbortSignal.any/timeout, Symbol.dispose/using, structuredClone. Ships .d.ts via JSDoc."
+    }
+  ]
+}
