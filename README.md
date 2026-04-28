@@ -198,11 +198,15 @@ Para atualizar quando uma skill ganhar nova versão:
 /plugin update solid@tarcisio-skills
 ```
 
+> **Importante:** após uma atualização upstream, `/plugin marketplace update tarcisio-skills` é obrigatório antes de qualquer `/plugin install` ou `/plugin update` — caso contrário, o cliente reusa o clone local antigo e a nova versão nunca chega ao runtime.
+
 ### Opção 2 — `degit` (cópia simples sem Claude Code)
 
+A estrutura publicada segue o spec de plugin do Claude Code, então o `SKILL.md` real fica em `<skill>/skills/<skill>/`. Aponte o `degit` para a pasta interna:
+
 ```bash
-npx degit tarcisioq/claude-skills/solid ~/.claude/skills/solid
-npx degit tarcisioq/claude-skills/vanilla-js-architect ~/.claude/skills/vanilla-js-architect
+npx degit tarcisioq/claude-skills/solid/skills/solid ~/.claude/skills/solid
+npx degit tarcisioq/claude-skills/vanilla-js-architect/skills/vanilla-js-architect ~/.claude/skills/vanilla-js-architect
 ```
 
 Útil em automação (CI, dotfiles managers) ou quando você prefere copiar sem git history. Re-rode para atualizar.
@@ -211,8 +215,8 @@ npx degit tarcisioq/claude-skills/vanilla-js-architect ~/.claude/skills/vanilla-
 
 ```bash
 git clone https://github.com/tarcisioq/claude-skills.git
-cp -r claude-skills/solid ~/.claude/skills/
-cp -r claude-skills/vanilla-js-architect ~/.claude/skills/
+cp -r claude-skills/solid/skills/solid ~/.claude/skills/solid
+cp -r claude-skills/vanilla-js-architect/skills/vanilla-js-architect ~/.claude/skills/vanilla-js-architect
 ```
 
 Útil se você quer todas as skills e pretende contribuir de volta via PR.
@@ -224,26 +228,29 @@ mkdir ~/.claude/skills/solid && cd ~/.claude/skills/solid
 git init
 git remote add origin https://github.com/tarcisioq/claude-skills.git
 git config core.sparseCheckout true
-echo "solid/*" > .git/info/sparse-checkout
-git pull origin main
+echo "solid/skills/solid/*" > .git/info/sparse-checkout
+git pull origin master
+# move o conteúdo da subpasta para a raiz da skill
+mv solid/skills/solid/* . && rm -rf solid
 ```
 
 Útil se você quer atualizar via `git pull` sem clonar o repo inteiro.
 
 ### Verificar instalação
 
-Via Claude Code:
+Via Claude Code (skill instalada como plugin):
 ```
 /plugin list
+/skills
 ```
 
-Manualmente:
+Manualmente (skill copiada para `~/.claude/skills/`):
 ```bash
 ls ~/.claude/skills/
 # → solid  vanilla-js-architect
 ```
 
-Cada subpasta deve conter `SKILL.md` + `references/`.
+Cada subpasta em `~/.claude/skills/<name>/` deve conter `SKILL.md` + `references/` na raiz. (Plugins instalados via `/plugin` ficam em `~/.claude/plugins/cache/` com a estrutura `skills/<name>/SKILL.md` interna — não tente copiar de lá.)
 
 ### Forçar always-on em um projeto
 
