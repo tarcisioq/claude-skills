@@ -1,7 +1,7 @@
 {
   "name": "solid",
   "description": "Engineering discipline cross-language: SOLID + TDD + clean code + refactoring + design patterns + architecture + code review + legacy code + when-not-to-apply. 14 operational references with mechanical tells, decision trees, and Fowler-style refactor recipes. Examples in TypeScript; rules universal across OO languages.",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "author": {
     "name": "tarcisioq",
     "email": "tarcisioq@gmail.com"

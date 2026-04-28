@@ -4,7 +4,7 @@ description: Designs and implements browser-side SDKs, libraries, and frameworks
 license: MIT
 metadata:
   author: https://github.com/tarcisioq
-  version: "2.0.0"
+  version: "2.1.0"
   domain: architecture
   triggers: SDK, library, framework, vanilla JavaScript, public API, plugin system, class design, ESM bundle, UMD, browser SDK, JS architecture
   role: architect
@@ -43,6 +43,27 @@ If you find yourself writing code without having loaded the relevant reference, 
 - UI framework code (React, Vue, Svelte components) → use `frontend-design` or a framework skill
 - One-off scripts or application-internal utilities → overkill
 
+## Top 5 Rules — Read This First
+
+These are the rules that fire on almost every real SDK review. If you're short on time, anchor here before the Decision Tree and Anti-Pattern Gallery below.
+
+| # | Rule | Tell to detect |
+|---|------|----------------|
+| 1 | **Throw typed errors with stable `code`** | `throw "..."`, `throw new Error("...")` without code, or `instanceof Error` checks at call sites — define `class SDKError extends Error` with `code` (Anti-pattern #3) |
+| 2 | **Propagate `AbortSignal` through every long-running async path** | Any `async` function that awaits, polls, retries, or schedules without an `{ signal }` option — and any internal `await fetch(...)` without forwarding the signal (Anti-pattern #9) |
+| 3 | **Named exports + `sideEffects` declared** | `export default { ... }` aggregates, missing `sideEffects` field in `package.json`, or imports running side-effects at module top — kill tree-shaking (Anti-patterns #2, #5) |
+| 4 | **Clone consumer-provided objects before reading** | `options.x ??= default`, `Object.assign(opts, ...)`, mutating arrays/objects passed in — silent surprise for the caller (Anti-pattern #4) |
+| 5 | **Async surface consistent across an API** | Two methods on the same class doing the same conceptual work but one returns `Promise` and the other doesn't — confuses consumers and prevents reliable awaiting (Anti-pattern #13) |
+
+After these, the rest of the document covers full decision trees, less-frequent smells, and references for deep dives.
+
+## Recent Changes
+
+- **2.1.0** (2026-04-28) — Promoted AbortSignal anti-pattern (#9) with broader examples covering all long-running async shapes (not just poll loops). Added new anti-pattern #13: inconsistent async surface within a single API. Added smoke-test step to Core Workflow (verify built artifact after distribution changes). Added Top 5 Rules lead-in. Shrunk Anti-Pattern Gallery examples (kept ❌ + 1-line fix). Added this changelog block.
+- **2.0.0** (2026-04-27) — Full operational rewrite: 5-question decision tree, 12 anti-patterns, 14 references, self-applicable checklist.
+
+Full history: `docs/vanilla-js-architect.md` (workspace dev doc).
+
 ## Core Workflow
 
 1. **Clarify the consumer contract.** Who calls this code? What's the entry point (`new SDK()`, `createClient()`, `import { fn }`)? Which runtimes (browsers? Workers? Deno?) and bundlers must it support? Read existing `package.json` (`exports`, `browserslist`, `sideEffects`, `type`) before designing
@@ -50,8 +71,9 @@ If you find yourself writing code without having loaded the relevant reference, 
 3. **Architect for extension.** Decide which extension points exist (plugins, hooks, subclassing, event listeners) and which internals stay private (`#fields`, module-scoped closures, `WeakMap`)
 4. **Implement.** Apply patterns from the reference files. Keep the public surface minimal and the internals replaceable. Pass `AbortSignal` through every async path
 5. **Validate distribution.** Bundle size budget, tree-shake check, no leaked Node globals (`process`, `Buffer`), no `eval`/`new Function`/dynamic `require`. ESM verified to load in a real browser
-6. **Test the contract.** Tests against the public API only. Cover: happy path, error path, plugin/hook integration, cancellation, memory leak, and at least one edge case per public method
-7. **Run the Review Checklist** before declaring done
+6. **Smoke-test the built artifact.** After any change that touches `package.json`, `rollup.config.js`/bundler, exports map, minifier flags, or entry-point splitting: load the built file (`node --input-type=module -e 'import("./dist/index.mjs").then(m => console.log(Object.keys(m)))'` or open the UMD in a browser) and verify named exports, error subclasses, and any side-effect-free imports actually work. Tree-shake assumptions are false until empirically proven on the artifact you ship
+7. **Test the contract.** Tests against the public API only. Cover: happy path, error path, plugin/hook integration, cancellation, memory leak, and at least one edge case per public method
+8. **Run the Review Checklist** before declaring done
 
 ## Decision Tree — High-Level Design
 
@@ -114,26 +136,20 @@ function getUser(id) {
   if (cache.has(id)) return cache.get(id);
   return fetch(`/u/${id}`).then(r => r.json());
 }
-
-// ✅ — always async; predictable
-async function getUser(id) {
-  if (cache.has(id)) return cache.get(id);
-  const r = await fetch(`/u/${id}`);
-  return r.json();
-}
 ```
+
+**Tell:** non-`async` function that returns a Promise on some paths and a value on others.
+**Fix:** declare `async` so every path returns a Promise; predictability beats the micro-optimization of avoiding the cache-hit microtask.
 
 ### 2. Default-export everything
 
 ```javascript
 // ❌ — kills tree-shaking, locks consumers into one shape
 export default { Client, SDKError, createClient, version: "1.0.0" };
-
-// ✅ — named exports, granular
-export { Client } from "./client.js";
-export { SDKError } from "./errors.js";
-export { createClient } from "./factory.js";
 ```
+
+**Tell:** `export default {` aggregating multiple symbols, or any `index.js` whose default export is an object literal.
+**Fix:** use granular named exports (`export { Client } from "./client.js"`); reserve `default` for the single main SDK class when an `import Foo from "lib"` ergonomics is genuinely valuable.
 
 ### 3. Throwing strings or plain `Error`
 
@@ -141,10 +157,10 @@ export { createClient } from "./factory.js";
 // ❌ — consumer can't switch on it, can't `instanceof`, no stack
 throw "rate limited";
 throw new Error("rate limited"); // marginally better, still no `code`
-
-// ✅ — typed error with stable code
-throw new SDKError("rate limited", "RATE_LIMITED", { details: { retryAfter: 5 } });
 ```
+
+**Tell:** `throw <string>`, `throw new Error(...)` without a code, or call sites switching on `error.message` text.
+**Fix:** define `class SDKError extends Error` with a stable `code` string + optional `details` (`throw new SDKError("rate limited", "RATE_LIMITED", { details: { retryAfter: 5 } })`); export the class so consumers can `instanceof` and switch on `code`.
 
 ### 4. Mutating consumer-provided options
 
@@ -154,16 +170,10 @@ function createClient(options) {
   options.baseUrl ??= "https://api.example.com";
   return new Client(options);
 }
-
-// ✅ — clone defensively, freeze internally
-function createClient(userOptions = {}) {
-  const options = Object.freeze({
-    baseUrl: "https://api.example.com",
-    ...userOptions,
-  });
-  return new Client(options);
-}
 ```
+
+**Tell:** `??=`, `||=`, `Object.assign(opts, ...)`, `arr.push(...)`, or any write to an argument the consumer passed in.
+**Fix:** clone before reading (`const options = Object.freeze({ baseUrl: "...", ...userOptions })`); deep-clone arrays and nested objects too — `structuredClone(input)` for anything beyond a flat options bag.
 
 ### 5. Polyfill imported at module top
 
@@ -171,11 +181,10 @@ function createClient(userOptions = {}) {
 // ❌ — every consumer ships the polyfill, even if they don't need it
 import "core-js/stable";
 export class Client { /* ... */ }
-
-// ✅ — separate opt-in entry; document required globals in README
-// package.json:
-// "exports": { ".": "./dist/index.mjs", "./polyfilled": "./dist/polyfilled.mjs" }
 ```
+
+**Tell:** any side-effect import (`import "..."` without a binding) at module top, especially polyfills, registration calls, or auto-init logic.
+**Fix:** put the side-effect behind a separate subpath (`"./polyfilled": "./dist/polyfilled.mjs"`, `"./auto-init": "./dist/auto-init.mjs"`) so consumers opt in; document required globals in the README. Mark the main entry `sideEffects: false` and the side-effect entries `sideEffects: ["./dist/auto-init.mjs"]`.
 
 ### 6. Positional args for many parameters
 
@@ -183,10 +192,10 @@ export class Client { /* ... */ }
 // ❌ — adding `debug` later breaks every caller; positions become hieroglyphs
 function createClient(apiKey, baseUrl, timeout, retries, debug, plugins) {}
 createClient("k", undefined, 5000, undefined, false); // unreadable
-
-// ✅ — options object
-function createClient({ apiKey, baseUrl, timeout = 5000, retries = 3 } = {}) {}
 ```
+
+**Tell:** > 2 positional parameters, or call sites passing `undefined` to skip an arg.
+**Fix:** options object with destructured defaults (`function createClient({ apiKey, baseUrl, timeout = 5000, retries = 3 } = {}) {}`); adding a new option later is non-breaking for every existing caller.
 
 ### 7. `console.log` left in production code
 
@@ -198,45 +207,30 @@ class SDK {
     this.#queue.push(event);
   }
 }
-
-// ✅ — gated by debug flag, default off; or telemetry hook injected by consumer
-class SDK {
-  #debug;
-  constructor({ debug = false } = {}) { this.#debug = debug; }
-  track(event) {
-    if (this.#debug) this.#log("tracking", event);
-    this.#queue.push(event);
-  }
-  #log(...args) { console.debug("[my-sdk]", ...args); }
-}
 ```
+
+**Tell:** `console.log`/`info`/`debug` reachable from a public method without a debug gate; or a minifier configured with `drop_console: true` (silently kills `console.error` too).
+**Fix:** gate verbose logging behind a `debug` flag (`if (this.#debug) console.debug("[my-sdk]", ...args)`) or inject a `logger` hook the consumer controls. For minifier `drop_console`, use `pure_funcs: ["console.log","console.info","console.debug"]` so `console.error`/`warn` survive.
 
 ### 8. Async function that throws synchronously
 
 ```javascript
-// ❌ — looks fine, but consumer might do `sdk.fetch().catch(handle)` expecting rejection
-async function fetch(id) {
-  if (!id) throw new SDKError("id required", "INVALID_ARG"); // becomes rejection — OK
-  // BUT: outside `async`, raw `throw` before any `await` happens synchronously
-}
-
-// In a non-async wrapper:
+// ❌ — non-async wrapper throws BEFORE returning the Promise; consumer's `.catch()` never sees it
 function fetch(id) {
-  if (!id) throw new SDKError("id required", "INVALID_ARG"); // ❌ sync throw from "async-shaped" API
-  return doFetchAsync(id);
-}
-
-// ✅ — keep the throw inside an async function so it always rejects
-async function fetch(id) {
   if (!id) throw new SDKError("id required", "INVALID_ARG");
   return doFetchAsync(id);
 }
 ```
 
+**Tell:** non-`async` function that returns a Promise on the happy path but throws synchronously on input validation.
+**Fix:** mark the wrapper `async` so any `throw` becomes a rejection (`async function fetch(id) { if (!id) throw new SDKError(...); return doFetchAsync(id); }`); consumers' `.catch()` and `try/await` then handle every failure mode uniformly.
+
 ### 9. Long-running async without `AbortSignal`
 
+This is the highest-leverage SDK rule — consumer cancellation isn't optional. It applies to **every long-running async shape**, not just poll loops.
+
 ```javascript
-// ❌ — consumer can't cancel, can't time out, leaks if component unmounts
+// ❌ a — poll loop with no cancellation; consumer can't stop it on unmount
 async function poll(url) {
   while (true) {
     await fetch(url);
@@ -244,28 +238,31 @@ async function poll(url) {
   }
 }
 
-// ✅ — accept and propagate signal
-async function poll(url, { signal } = {}) {
-  while (!signal?.aborted) {
-    signal?.throwIfAborted();
-    await fetch(url, { signal });
-    await sleep(1000, { signal });
-  }
+// ❌ b — public method accepts `signal`, but doesn't forward it to internal awaits → only the entry call cancels, the inner ones complete and leak
+async function get(id, { signal } = {}) {
+  signal?.throwIfAborted();
+  const data = await fetch(`/u/${id}`); // signal not propagated
+  return await postProcess(data);        // signal not propagated
+}
+
+// ❌ c — `setTimeout`-based "timeout" that races a Promise but doesn't cancel the underlying work (still runs, still consumes resources)
+function withTimeout(promise, ms) {
+  return Promise.race([promise, sleep(ms).then(() => { throw new Error("timeout"); })]);
 }
 ```
+
+**Tell:** any of: `async` function with awaits/loops/retries that doesn't accept `{ signal }`; method that accepts `signal` but doesn't forward it to inner `fetch`/`sleep`/sub-calls; "timeout" implemented with `Promise.race` instead of `AbortSignal.timeout`/`AbortSignal.any`.
+**Fix:** thread `AbortSignal` through every async layer (`fetch(url, { signal })`, `sleep(ms, { signal })`); compose multiple sources with `AbortSignal.any([consumer, AbortSignal.timeout(ms), this.#destroyController.signal])`; rely on `signal.throwIfAborted()` at top-of-method and reject naturally inside loops. See `references/async-and-cancellation.md`.
 
 ### 10. Plugin system without a contract
 
 ```javascript
 // ❌ — plugins are arbitrary functions; no name, no lifecycle, no dedup
 sdk.use(req => { req.headers.foo = "bar"; return req; });
-
-// ✅ — plugins are named objects with declared hooks; SDK validates and calls them
-sdk.use({
-  name: "auth",
-  beforeRequest(req) { req.headers.Authorization = `Bearer ${this.token}`; return req; },
-});
 ```
+
+**Tell:** `sdk.use(fn)` accepting bare functions with no required shape; no way to dedup, replace, or order plugins; no errors when a "plugin" returns the wrong type.
+**Fix:** declare a `BasePlugin` contract with required `name` + named lifecycle hooks (`beforeRequest`, `afterResponse`, `onError`, `destroy`); validate the shape on `use()` and reject duplicates by `name`. See `references/sdk-architecture.md`.
 
 ### 11. Leaking Node.js APIs into browser builds
 
@@ -273,24 +270,46 @@ sdk.use({
 // ❌ — `process`, `Buffer`, `require` blow up in browsers
 const apiKey = process.env.API_KEY; // ReferenceError in browser
 const buf = Buffer.from("x"); // ReferenceError
-
-// ✅ — use Web Standards
-const apiKey = options.apiKey; // pass via constructor
-const buf = new TextEncoder().encode("x"); // Uint8Array
 ```
+
+**Tell:** any reference to `process`, `Buffer`, `require`, `__dirname`, `fs`/`path`/`os` imports, or `globalThis.process` checks at module top.
+**Fix:** use Web Standards (`new TextEncoder().encode("x")` for bytes, `crypto.subtle` for hashing, options-passed-by-consumer for config); for genuinely runtime-conditional code use feature detection (`typeof structuredClone === "function"`), never UA sniffing. See `references/cross-runtime.md`.
 
 ### 12. Mixing CommonJS and ESM without `exports` map
 
 ```javascript
 // ❌ — package.json with "main" pointing at CJS and "module" at ESM, no `exports`
 // Consumers' bundlers pick inconsistently; dual-package hazard creates duplicate state
+```
 
-// ✅ — single source of truth via `exports`
-{
-  "type": "module",
-  "exports": { ".": { "import": "./dist/index.mjs", "default": "./dist/index.mjs" } }
+**Tell:** `package.json` has `main` + `module` but no `exports` field; or `exports` exists but ships both CJS and ESM versions of the same module without isolation.
+**Fix:** make `exports` the single source of truth (`{ ".": { "import": "./dist/index.mjs", "default": "./dist/index.mjs" } }`); when supporting CJS, version any module-scoped state via a separate file shared between both builds, never duplicated.
+
+### 13. Inconsistent async surface within a single API
+
+```javascript
+// ❌ — the three `set*` methods do the same conceptual work (write to storage),
+//      but two return Promise<void> and the third returns nothing/undefined.
+//      Consumer code that does `await storage.setSession(id)` works for cookie but silently
+//      no-ops the await for localStorage; switching backing stores becomes a breaking change.
+class Storage {
+  setSessionCookie(id) {
+    document.cookie = `sid=${id}`;
+    // returns undefined (fire-and-forget)
+  }
+  setSessionLocal(id) {
+    localStorage.setItem("sid", id);
+    // returns undefined (fire-and-forget)
+  }
+  async setSessionIDB(id) {
+    await idb.put("sessions", id, "current");
+    // returns Promise<void>
+  }
 }
 ```
+
+**Tell:** two or more methods on the same class doing the same conceptual operation but with different return shapes — some sync/`undefined`, some `Promise`. Or: a method documented as async but whose only `await` is conditional (so it returns sync on the fast path).
+**Fix:** make the *whole surface* async if any path is async (return `Promise<void>` from every variant, even when the underlying API is synchronous — the cost is one microtask). Document the contract in JSDoc and stick to it; the consumer should be able to swap backing stores without changing call sites. If sync is genuinely required for some calls (e.g. perf-critical hot path), name the methods differently (`setSessionSync` vs `setSession`) so consumers can't accidentally await a no-op.
 
 ## Reference Guide
 

@@ -1,7 +1,7 @@
 {
   "name": "vanilla-js-architect",
   "description": "Designs and implements browser-side SDKs, libraries, and frameworks in vanilla JavaScript. Architecture, encapsulation, distribution (ESM/UMD/IIFE), and cross-runtime support (browsers, Workers, Deno, Bun, Cloudflare Workers). Modern primitives: AbortSignal.any/timeout, Symbol.dispose/using, structuredClone. Ships .d.ts via JSDoc.",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "author": {
     "name": "tarcisioq",
     "email": "tarcisioq@gmail.com"

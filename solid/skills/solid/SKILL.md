@@ -4,7 +4,7 @@ description: Use when writing, refactoring, reviewing, or designing code in any 
 license: MIT
 metadata:
   author: https://github.com/tarcisioq
-  version: "2.0.0"
+  version: "2.1.0"
   domain: software-engineering
   triggers: SOLID, TDD, clean code, refactoring, code review, architecture, design patterns, code smells, value objects, single responsibility, dependency injection
   role: senior-engineer
@@ -47,6 +47,27 @@ Applying full SOLID/TDD discipline to the wrong context wastes time and adds har
 - **Configuration files** disguised as code
 
 See `references/when-not-to-apply.md` for the operational decision tree.
+
+## Top 5 Rules — Read This First
+
+These are the rules that fire on almost every real review. If you're short on time, anchor here before the Decision Trees and Anti-Pattern Gallery below.
+
+| # | Rule | Tell to detect |
+|---|------|----------------|
+| 1 | **Methods ≤ 10 lines** | Method body > 10 lines OR name needs "and" to describe — apply Compose Method (Anti-pattern #8) |
+| 2 | **Classes ≤ 50 lines, ≤ 2 ivars of *mutable runtime state*** | Constructor-injected collaborators do **NOT** count toward the 2-ivar limit (see Q2 below). > 50 lines or > 2 stateful ivars → split per concern (Anti-pattern #11) |
+| 3 | **Wrap domain primitives in value objects** | Any `string`/`number`/`Date` parameter representing email, money, id, age, country, status — wrap (Anti-pattern #1) |
+| 4 | **No `else` after early return** | Any `else` block after an `if` that returns — collapse to guard clauses (Anti-pattern #9) |
+| 5 | **Throw typed errors with stable `code`; never sometimes-throw-sometimes-return** | Strings, `new Error(msg)` without code, or mixed throw/return for the same failure — define a typed exception (Q4) |
+
+After these, the rest of the document covers edge cases, less-frequent smells, and references for deep dives.
+
+## Recent Changes
+
+- **2.1.0** (2026-04-28) — Reformulated the "≤ 2 instance variables" rule to exempt constructor-injected collaborators (only mutable runtime state counts). Added this Top 5 Rules section. Shrunk Anti-Pattern Gallery examples (kept ❌ + 1-line fix; full ✅ rewrites moved to references). Added this changelog block.
+- **2.0.0** (2026-04-27) — Full operational rewrite: 7 decision trees, 14 anti-patterns, 14 references, self-applicable checklist. Replaces former `clean-code-discipline` and `tdd-workflow` plans.
+
+Full history: `docs/solid.md` (workspace dev doc).
 
 ## Core Workflow
 
@@ -106,7 +127,7 @@ A class needs splitting when **any** of these fire:
 | Tell (mechanical) | Action |
 |-------------------|--------|
 | `> 50 lines` | Split — likely doing too much |
-| `> 2 instance variables` | Split — multiple concerns mixed |
+| `> 2 instance variables of mutable runtime state` (constructor-injected collaborators don't count) | Split — multiple concerns of state mixed |
 | `> 5 public methods` | Split — interface too wide |
 | Method names span 2+ verb domains (e.g. `save*` + `validate*` + `format*`) | Split per domain |
 | You describe it with "and" ("Order **and** invoice generation **and** persistence") | Split per "and" |
@@ -195,27 +216,10 @@ function createUser(email: string, age: number, country: string) {
   if (age < 0) throw new Error("invalid age");
   // Validation scattered, easy to forget at every callsite
 }
-
-// ✅ Value objects — invalid states impossible by construction
-class Email {
-  constructor(private readonly value: string) {
-    if (!value.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) throw new InvalidEmail(value);
-  }
-  toString(): string { return this.value; }
-}
-
-class Age {
-  constructor(private readonly value: number) {
-    if (!Number.isInteger(value) || value < 0 || value > 150) throw new InvalidAge(value);
-  }
-}
-
-function createUser(email: Email, age: Age, country: CountryCode) {
-  // Validation already happened at construction. Here: just business logic.
-}
 ```
 
 **Tell to detect:** any function param with type `string` or `number` representing a domain concept (id, email, money, date, country, status). Wrap.
+**Fix:** introduce a value object that validates at construction (`class Email { constructor(value) { /* validate */ } }`); push validation to the type boundary so callers can't pass invalid state. See `references/object-design.md`.
 
 ### 2. Boolean parameters
 
@@ -225,16 +229,10 @@ user.save(true);
 
 // ❌ — multiple booleans is a combinatorial explosion of meaning
 user.save(true, false, true);
-
-// ✅ — split into separate methods OR use named options object
-user.saveAndNotify();
-user.saveQuietly();
-
-// OR
-user.save({ notify: true, validateBeforeSave: false });
 ```
 
 **Tell:** boolean parameter on any public method.
+**Fix:** split into named methods (`user.saveAndNotify()`, `user.saveQuietly()`) when the call-sites diverge; use a named options object (`user.save({ notify: true })`) when most flags share a code path.
 
 ### 3. Switch on type
 
@@ -245,16 +243,10 @@ function getArea(shape: Shape): number {
   if (shape.type === "square") return shape.side ** 2;
   if (shape.type === "triangle") return 0.5 * shape.base * shape.height;
 }
-
-// ✅ — polymorphism. Add new shape = add new class. No edits to existing code.
-interface Shape {
-  area(): number;
-}
-class Circle implements Shape { /* ... */ area() { /* ... */ } }
-class Square implements Shape { /* ... */ }
 ```
 
 **Tell:** `if/else` chain or `switch` on a `type` / `kind` / `discriminator` field.
+**Fix:** Replace Conditional with Polymorphism (`refactoring-catalogue.md`) — define an interface (`area(): number`), one class per variant; adding a variant = adding a class, no edits to existing code.
 
 ### 4. Anemic domain model
 
@@ -271,19 +263,10 @@ class UserService {
     else user.balance -= amount;
   }
 }
-
-// ✅ — User has behavior. Service orchestrates, doesn't manipulate.
-class User {
-  withdraw(amount: Money): WithdrawResult {
-    const finalAmount = this.discountPolicy.apply(amount);
-    if (this.balance.isLessThan(finalAmount)) return WithdrawResult.insufficientFunds();
-    this.balance = this.balance.minus(finalAmount);
-    return WithdrawResult.success();
-  }
-}
 ```
 
 **Tell:** classes with only getters/setters; logic in `*Service` that mutates other classes' state.
+**Fix:** move behavior onto the entity that owns the data (`user.withdraw(amount)` returning a `Result`); the service then orchestrates instead of manipulating internals.
 
 ### 5. Premature abstraction
 
@@ -291,16 +274,11 @@ class User {
 // ❌ — interface with one implementation, "for future flexibility"
 interface UserRepository { save(u: User): Promise<void>; }
 class PostgresUserRepository implements UserRepository { /* only impl */ }
-
-// ✅ — class direct. Add interface when 2nd implementation is needed.
-class PostgresUserRepository {
-  save(u: User): Promise<void> { /* ... */ }
-}
 ```
 
 **Tell:** abstraction (interface/abstract class) with only ONE implementation, where you don't have a test double or different runtime variant.
-
-**Exception:** in DDD architectures, you may want the interface in the domain layer with the concrete impl in infrastructure (DIP at architecture level). That's intentional, not premature.
+**Fix:** use the concrete class directly; introduce the interface when a 2nd impl arrives (Rule of Three) or when a test double is genuinely needed.
+**Exception:** DDD architectures legitimately keep the interface in the domain layer with the concrete impl in infrastructure (DIP at architecture level). That's intentional, not premature.
 
 ### 6. Speculative generality
 
@@ -312,26 +290,20 @@ class PaymentProcessor {
   audit() { throw new Error("Not implemented"); }
   scheduleRecurring() { throw new Error("Not implemented"); }
 }
-
-// ✅ — only what's used now
-class PaymentProcessor {
-  process(amount: Money) { /* ... */ }
-}
 ```
 
 **Tell:** unused parameters, `throw new Error("Not implemented")`, options never set.
+**Fix:** delete unused methods, params, and options; reintroduce only when a real use-case arrives. YAGNI > flexibility budget.
 
 ### 7. Train wreck (Law of Demeter violation)
 
 ```typescript
 // ❌ — chain of dots. Caller knows too much about object graph.
 order.getCustomer().getAddress().getCity().getState().toUpperCase();
-
-// ✅ — ask the immediate friend; let it ask its friends
-order.getShippingState();
 ```
 
 **Tell:** more than one `.` per expression chain on object accesses.
+**Fix:** ask the immediate friend (`order.getShippingState()`); push the traversal *into* the object that owns the data, so callers depend on one layer instead of the whole graph.
 
 ### 8. Method longer than 10 lines
 
@@ -344,18 +316,10 @@ function processOrder(order: Order) {
   // Persist (4 lines)
   // Notify (3 lines)
 }
-
-// ✅ — compose method pattern
-function processOrder(order: Order) {
-  validateOrder(order);
-  const total = calculateTotal(order);
-  const final = applyDiscounts(total, order.customer);
-  saveOrder(order, final);
-  notifyCustomer(order);
-}
 ```
 
 **Tell:** method body > 10 lines OR method name needs "and" to describe.
+**Fix:** apply Compose Method (`refactoring-catalogue.md`) — extract each section into a named helper so the parent reads as a high-level recipe (`validateOrder` → `calculateTotal` → `applyDiscounts` → ...).
 
 ### 9. Else after early return
 
@@ -368,15 +332,10 @@ function getDiscount(user: User): Percent {
     return Percent.of(0);
   }
 }
-
-// ✅ — guard clause + early return
-function getDiscount(user: User): Percent {
-  if (user.isPremium) return Percent.of(20);
-  return Percent.of(0);
-}
 ```
 
 **Tell:** any `else` block. Almost always a missed early return.
+**Fix:** flatten with guard clauses (`if (user.isPremium) return Percent.of(20); return Percent.of(0);`) — drops one indentation level and removes dead syntax.
 
 ### 10. Mocking value objects
 
@@ -384,12 +343,10 @@ function getDiscount(user: User): Percent {
 // ❌ — mocking a Money instance hides bugs in Money itself
 const mockMoney = { toCents: jest.fn().mockReturnValue(100) };
 order.add(mockMoney);
-
-// ✅ — use the real value object
-order.add(Money.dollars(1));
 ```
 
-**Tell:** mocking anything that's pure data + pure logic (Money, Email, DateRange). Mock infrastructure, not domain values.
+**Tell:** mocking anything that's pure data + pure logic (Money, Email, DateRange).
+**Fix:** use the real value object (`order.add(Money.dollars(1))`); reserve doubles for infrastructure boundaries (DB, network, filesystem).
 
 ### 11. God object
 
@@ -405,16 +362,10 @@ class User {
   // Billing
   charge() { } refund() {}
 }
-
-// ✅ — split by responsibility
-class User { /* identity + behavior */ }
-class AuthService { /* login, logout, reset */ }
-class UserPreferences { /* theme, language */ }
-class NotificationService { /* email, SMS */ }
-class BillingService { /* charge, refund */ }
 ```
 
-**Tell:** > 5 instance variables OR class with method names spanning 3+ verb domains.
+**Tell:** > 5 instance variables of mutable state (injected collaborators don't count — see Q2) OR class with method names spanning 3+ verb domains.
+**Fix:** split per stakeholder/verb domain (`User` keeps identity + behavior; carve out `AuthService`, `UserPreferences`, `NotificationService`, `BillingService`). Each piece passes the "and" test alone.
 
 ### 12. Comments explaining what
 
@@ -425,13 +376,10 @@ user.age = user.age + 1;
 
 // Check if user is older than 18
 if (user.age > 18) { /* ... */ }
-
-// ✅ — comment explains WHY when code can't (business rule, surprise, workaround)
-// Legal requirement: drinking age in this jurisdiction is 21, not 18
-if (user.age >= 21) { /* ... */ }
 ```
 
-**Tell:** comment that paraphrases the next line. Delete it. If the code isn't clear, rename.
+**Tell:** comment that paraphrases the next line.
+**Fix:** delete what-comments; rename identifiers if the code isn't self-explanatory. Keep a comment only when it captures *why* — a business rule, a workaround, a non-obvious constraint (`// Legal: drinking age here is 21, not 18`).
 
 ### 13. Singleton hiding dependencies
 
@@ -443,18 +391,10 @@ class OrderService {
     Database.getInstance().save(order);
   }
 }
-
-// ✅ — explicit constructor injection
-class OrderService {
-  constructor(private logger: Logger, private db: Database) {}
-  process(order: Order) {
-    this.logger.info("processing");
-    this.db.save(order);
-  }
-}
 ```
 
 **Tell:** `getInstance()` calls or static method calls reaching out to "shared" services.
+**Fix:** make every dependency explicit through the constructor (`constructor(private logger: Logger, private db: Database)`) so tests can substitute fakes and the dependency graph is visible at construction.
 
 ### 14. Long parameter list
 
@@ -469,22 +409,10 @@ function createOrder(
   discountCode: string,
   notes: string
 ) { }
-
-// ✅ — parameter object
-function createOrder(input: CreateOrderInput) { }
-
-class CreateOrderInput {
-  constructor(
-    readonly customer: Customer,
-    readonly items: OrderItems,
-    readonly addresses: { shipping: Address; billing: Address },
-    readonly payment: PaymentMethod,
-    readonly options: { discountCode?: DiscountCode; notes?: string },
-  ) {}
-}
 ```
 
 **Tell:** > 3 parameters in any function/method.
+**Fix:** Introduce Parameter Object (`refactoring-catalogue.md`) — group related params into a typed input class (`CreateOrderInput`); name the groupings (`addresses: { shipping, billing }`, `options: { discountCode, notes }`) so meaning isn't carried by position.
 
 ## Reference Guide
 
@@ -513,7 +441,7 @@ Load detailed guidance based on what you're about to do.
 - Write a failing test before production code (unless under "When NOT to Use")
 - Wrap primitives that represent domain concepts in value objects
 - Keep methods ≤ 10 lines, classes ≤ 50 lines, files ≤ 200 lines
-- Keep instance variables ≤ 2 per class (use composed value/structure objects)
+- Keep **mutable runtime-state** instance variables ≤ 2 per class (constructor-injected collaborators don't count — see Q2). If you have > 2 fields of *state*, compose them into a single value/structure object.
 - Keep parameter list ≤ 3; use parameter object beyond that
 - One level of indentation per method (early return for guards)
 - Apply Rule of Three before extracting duplication
@@ -555,7 +483,7 @@ Apply this list to every change. If any item is "no" or "not sure", fix before d
 - [ ] No method > 10 lines
 - [ ] No class > 50 lines
 - [ ] No method with > 1 level of indentation (early returns)
-- [ ] No class with > 2 instance variables (compose if more)
+- [ ] No class with > 2 instance variables of *mutable runtime state* (injected collaborators don't count — compose state into a value/structure object if more)
 - [ ] No function with > 3 parameters (parameter object)
 - [ ] No `else` blocks (early returns or polymorphism)
 

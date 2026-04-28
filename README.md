@@ -30,10 +30,10 @@ A primeira instrução produz interpretações divergentes. A segunda produz out
 
 | Métrica | Valor |
 |---------|-------|
-| Skills publicadas | 2 (versão 2.0.0) |
+| Skills publicadas | 2 (`solid` 2.1.0, `vanilla-js-architect` 2.1.0) |
 | References operacionais | 28 |
 | Linhas de conhecimento estruturado | ~13.900 |
-| Anti-patterns documentados (com `❌/✅`) | 26+ |
+| Anti-patterns documentados (com `❌` + Tell + Fix) | 27+ |
 | Decision trees | 50+ |
 | Refactor recipes (Fowler-style, steps numerados) | 19 |
 | Tells mecânicos com thresholds quantitativos | 100+ |
