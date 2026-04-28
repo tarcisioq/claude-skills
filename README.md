@@ -30,7 +30,7 @@ A primeira instrução produz interpretações divergentes. A segunda produz out
 
 | Métrica | Valor |
 |---------|-------|
-| Skills publicadas | 2 (`solid` 2.1.0, `vanilla-js-architect` 2.1.0) |
+| Skills publicadas | 2 (`solid` 2.2.0, `vanilla-js-architect` 2.2.0) |
 | References operacionais | 28 |
 | Linhas de conhecimento estruturado | ~13.900 |
 | Anti-patterns documentados (com `❌` + Tell + Fix) | 27+ |
@@ -56,8 +56,8 @@ Operacionaliza **SOLID + TDD + clean code + refactoring + design patterns + arqu
 **Conteúdo:**
 
 - **14 references operacionais** (~7.900 linhas)
-- **14 anti-patterns** no SKILL.md com tells de detecção mecânica
-- **7 decision trees** principais: TDD ou não, split classe, compose vs inherit, throw vs Result vs null, refactor agora vs depois, usar pattern, mock vs fake vs real
+- **15 anti-patterns** no SKILL.md com tells de detecção mecânica (inclui mutação através de `await` boundary)
+- **8 decision trees** principais: TDD ou não, split classe, compose vs inherit, throw vs Result vs null, refactor agora vs depois, usar pattern, mock vs fake vs real, **propagação de cancelamento (`AbortSignal`/`CancellationToken`/`context.Context`) através de cada layer de `await`**
 - **19 refactor recipes** Fowler-style com steps numerados (Extract Method, Replace Conditional with Polymorphism, Replace Primitive with Value Object, etc.)
 - **TDD avançado:** London/Detroit, double-loop TDD, ATDD, mock vs fake decision tree, mutation testing, property-based testing, transformation priority premise
 - **Métricas operacionais:** cyclomatic complexity ≤ 10, cognitive ≤ 15, nesting ≤ 2, instability metric (`I = Ce / (Ca + Ce)`), churn × complexity hotspot detection
@@ -88,7 +88,8 @@ Designs e implementa **SDKs, bibliotecas e frameworks browser-side** em vanilla 
 **Conteúdo:**
 
 - **14 references operacionais** (~5.000 linhas)
-- **12 anti-patterns** no SKILL.md (sometimes-sync/async, default-export-everything, polyfill em top-level, primitive obsession, etc.)
+- **13 anti-patterns** no SKILL.md (sometimes-sync/async, default-export-everything, polyfill em top-level, mutating consumer options com scope qualifier, AbortSignal multi-layer trace, inconsistent async surface, etc.)
+- **Hard Skip Gate** no topo do SKILL.md com 6 tells programáticos — refusa carregar quando 2+ matchearem (ex: imports `express`/`fastify`, sem bundler config, runtime PM2/node direto)
 - **Decision trees:** factory vs class, sync vs async, throw vs Result, singleton vs multi-instance, inheritance vs composition
 - **Cobertura cross-runtime:** browsers, Web Workers, Service Workers, Cloudflare Workers, Deno, Bun, Node 18+ via Web Standards primitives
 - **Testing rigoroso:** contract tests, plugin integration tests, memory leak detection (WeakRef + GC), bundle size regression, tree-shake validation programática

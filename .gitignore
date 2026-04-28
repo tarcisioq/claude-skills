@@ -4,3 +4,7 @@
 node_modules/
 .idea/
 .vscode/
+
+# Defensive: feedbacks/ is a workspace-only folder (lives outside this repo).
+# If anyone ever creates skills/feedbacks/ by mistake, keep it out of git.
+feedbacks/

@@ -4,9 +4,9 @@ description: Use when writing, refactoring, reviewing, or designing code in any 
 license: MIT
 metadata:
   author: https://github.com/tarcisioq
-  version: "2.1.0"
+  version: "2.2.0"
   domain: software-engineering
-  triggers: SOLID, TDD, clean code, refactoring, code review, architecture, design patterns, code smells, value objects, single responsibility, dependency injection
+  triggers: SOLID, TDD, clean code, refactoring, code review, architecture, design patterns, code smells, value objects, single responsibility, dependency injection, cancellation, AbortSignal
   role: senior-engineer
   scope: design-implementation-review
   output-format: code
@@ -50,7 +50,7 @@ See `references/when-not-to-apply.md` for the operational decision tree.
 
 ## Top 5 Rules — Read This First
 
-These are the rules that fire on almost every real review. If you're short on time, anchor here before the Decision Trees and Anti-Pattern Gallery below.
+These are the rules that fire on almost every real review. If you're short on time, anchor here before the Anti-Pattern Gallery and Decision Trees below.
 
 | # | Rule | Tell to detect |
 |---|------|----------------|
@@ -61,147 +61,6 @@ These are the rules that fire on almost every real review. If you're short on ti
 | 5 | **Throw typed errors with stable `code`; never sometimes-throw-sometimes-return** | Strings, `new Error(msg)` without code, or mixed throw/return for the same failure — define a typed exception (Q4) |
 
 After these, the rest of the document covers edge cases, less-frequent smells, and references for deep dives.
-
-## Recent Changes
-
-- **2.1.0** (2026-04-28) — Reformulated the "≤ 2 instance variables" rule to exempt constructor-injected collaborators (only mutable runtime state counts). Added this Top 5 Rules section. Shrunk Anti-Pattern Gallery examples (kept ❌ + 1-line fix; full ✅ rewrites moved to references). Added this changelog block.
-- **2.0.0** (2026-04-27) — Full operational rewrite: 7 decision trees, 14 anti-patterns, 14 references, self-applicable checklist. Replaces former `clean-code-discipline` and `tdd-workflow` plans.
-
-Full history: `docs/solid.md` (workspace dev doc).
-
-## Core Workflow
-
-### 1. Clarify the requirement (before any code)
-
-- Write the **acceptance criteria** in plain language. If you can't, you don't understand it yet.
-- Identify the **domain concepts**. These become value objects + entities.
-- Identify the **boundaries** — what's "in" the system, what's external?
-
-### 2. Decide TDD or not (decision tree below)
-
-Most production code → TDD. Spike code → no TDD. See Q1 in Decision Trees.
-
-### 3. Write the simplest test that fails (RED)
-
-- Concrete example, not abstract: `"applies 20% discount to premium users"` not `"can apply discount"`
-- Tests behavior, not implementation
-- Arrange-Act-Assert structure
-
-### 4. Write the simplest code to pass (GREEN)
-
-- Hardcode if needed (Fake It). Let next tests force generalization.
-- No abstraction yet. No "what if we need…". Just pass.
-
-### 5. Refactor (REFACTOR — design happens here)
-
-- Look at duplication. Apply Rule of Three (extract on 3rd, not 1st).
-- Apply size limits (see Constraints below).
-- Run review checklist.
-
-### 6. Repeat — RED → GREEN → REFACTOR
-
-When done, run the **full Review Checklist** at the end of this file.
-
-## Decision Trees — Resolve Before Writing Code
-
-### Q1: TDD or just write code?
-
-```
-Is this throwaway / spike / one-off?
-├── YES → No TDD. Write minimal code. (See when-not-to-apply.md)
-└── NO  ↓
-    Does the codebase have working test infrastructure?
-    ├── NO  → First task: set up testing. Then return here.
-    └── YES ↓
-        Is this fixing a bug?
-        ├── YES → Write failing test that REPRODUCES the bug. Then fix.
-        └── NO  → Write failing test for the new behavior. Then implement.
-```
-
-**TDD is non-negotiable for non-trivial production code.** Skip only by the rules above.
-
-### Q2: Split this class? When?
-
-A class needs splitting when **any** of these fire:
-
-| Tell (mechanical) | Action |
-|-------------------|--------|
-| `> 50 lines` | Split — likely doing too much |
-| `> 2 instance variables of mutable runtime state` (constructor-injected collaborators don't count) | Split — multiple concerns of state mixed |
-| `> 5 public methods` | Split — interface too wide |
-| Method names span 2+ verb domains (e.g. `save*` + `validate*` + `format*`) | Split per domain |
-| You describe it with "and" ("Order **and** invoice generation **and** persistence") | Split per "and" |
-| 2+ stakeholders would request changes to different parts | Split per stakeholder |
-
-**Don't split when:** value object (immutable, behaves as a single concept), Result-type wrapper, true aggregate root.
-
-### Q3: Compose or inherit?
-
-```
-Default: COMPOSE.
-
-Inherit ONLY when ALL three are true:
-1. True "is-a" relationship (a Dog IS-A Animal — survives the substitution test)
-2. Framework requires it (extending Error, EventTarget, Component base class)
-3. Hierarchy ≤ 1 level deep
-
-Otherwise: composition (inject behavior via constructor, use Strategy/Decorator).
-```
-
-If you find yourself adding `instanceof` checks or `if (parent.X) { ... } else { childOnly() }`, the inheritance is wrong — refactor to composition.
-
-### Q4: How to signal failure?
-
-| Failure characteristic | Use |
-|------------------------|-----|
-| Programmer error (bad args, misuse, contract violation) | Throw typed exception (`throw new InvalidEmail()`) |
-| Expected runtime failure (network, validation that consumer routinely handles) | Return `Result` type (`{ ok: boolean, value? error? }`) |
-| Operation may legitimately have no result | Return `null` (NOT `undefined`, NOT a sentinel like `-1`) |
-| Async operation failure | Reject Promise with typed error |
-
-**Never** throw strings. **Never** sometimes-throw-sometimes-return-error. **Never** use `undefined` for documented absence.
-
-### Q5: Refactor now or later?
-
-```
-Are tests covering the code I'm about to refactor?
-├── NO  → STOP. Add characterization tests first. (legacy-code.md)
-└── YES ↓
-    Is the refactor in my path right now (the code I'm working on)?
-    ├── YES → Refactor as Boy Scout improvement
-    └── NO  ↓
-        Is the smell blocking new features or causing bugs?
-        ├── YES → Schedule dedicated session
-        └── NO  → Note it, leave it. YAGNI.
-```
-
-### Q6: Use a design pattern?
-
-```
-Did I recognize the problem? (have I seen this exact shape 2+ times before?)
-├── NO  → Don't force a pattern. Write straight code.
-└── YES ↓
-    Does the pattern make this SIMPLER?
-    ├── NO  → Don't use it. Pattern is overhead, not virtue.
-    └── YES ↓
-        Will the team understand it without explanation?
-        ├── NO  → Use only with comment + reference link
-        └── YES → Apply pattern
-```
-
-**Anti-pattern: Pattern-first design.** Patterns emerge from refactoring, not blueprint.
-
-### Q7: Mock, fake, stub, or real?
-
-| Need | Use |
-|------|-----|
-| Verify a method was called with specific args | **Mock** (`expect(spy).toHaveBeenCalledWith(...)`) |
-| Provide canned return values | **Stub** (returns fixed data) |
-| Substitute a slow/external dependency with a working in-memory version | **Fake** (`InMemoryUserRepo`) |
-| Test pure domain logic | **Real objects** — no doubles |
-| Pass a dependency that's never used | **Dummy** (`{} as Logger`) |
-
-**Default: real objects + fakes for I/O.** Reach for mocks only when verifying interaction is the actual contract (e.g. "ensure email was sent").
 
 ## Anti-Patterns Gallery
 
@@ -247,6 +106,7 @@ function getArea(shape: Shape): number {
 
 **Tell:** `if/else` chain or `switch` on a `type` / `kind` / `discriminator` field.
 **Fix:** Replace Conditional with Polymorphism (`refactoring-catalogue.md`) — define an interface (`area(): number`), one class per variant; adding a variant = adding a class, no edits to existing code.
+**Exemption:** if the discriminator IS a closed protocol-level enum (HTTP verbs, file extensions, MIME types, image formats fixed by an external spec) and each branch is just a small config selector — table dispatch (`{ get, post, delete }[verb]`) is fine; the polymorphism would only shuffle the names without removing the dispatch. The rule fires when the discriminator is a *domain* shape that grows over time, not when it's a fixed protocol surface.
 
 ### 4. Anemic domain model
 
@@ -414,6 +274,195 @@ function createOrder(
 **Tell:** > 3 parameters in any function/method.
 **Fix:** Introduce Parameter Object (`refactoring-catalogue.md`) — group related params into a typed input class (`CreateOrderInput`); name the groupings (`addresses: { shipping, billing }`, `options: { discountCode, notes }`) so meaning isn't carried by position.
 
+### 15. Mutation across an `await` boundary (hidden temporal coupling)
+
+```typescript
+// ❌ — `this._args` mutated on both sides of the await. Future refactor that
+//      shares the instance across requests, or cancels mid-flight, silently
+//      breaks: half-applied state, observers seeing inconsistent reads,
+//      retries reusing partially-mutated input.
+class Order {
+  async build(args: BuildArgs) {
+    this._args = args;
+    this._args.options.contract = await this.fetchContract(args.id);
+    const auth = await this.authenticate();
+    this._args.headers = auth.headers; // second mutation, on the other side of `await`
+    return this._args;
+  }
+}
+```
+
+**Tell:** any `this.x = …` or argument-property write that brackets an `await` on the same logical operation. Bonus tell: the method reads from `this.x` after the second mutation.
+**Fix:** extract a pure transform that returns a new immutable object once all async work has resolved; mutate `this` in exactly one place — at the end, or never (prefer constructing a new value and assigning whole). Apply when retries, shared instances, or observers are even *possible* in the lifetime of the class — the bug doesn't fire today but the invariant is fragile.
+
+## Decision Trees — Resolve Before Writing Code
+
+### Q1: TDD or just write code?
+
+```
+Is this throwaway / spike / one-off?
+├── YES → No TDD. Write minimal code. (See when-not-to-apply.md)
+└── NO  ↓
+    Does the codebase have working test infrastructure?
+    ├── NO  → First task: set up testing. Then return here.
+    └── YES ↓
+        Is this fixing a bug?
+        ├── YES → Write failing test that REPRODUCES the bug. Then fix.
+        └── NO  → Write failing test for the new behavior. Then implement.
+```
+
+**TDD is non-negotiable for non-trivial production code.** Skip only by the rules above.
+
+### Q2: Split this class? When?
+
+A class needs splitting when **any** of these fire:
+
+| Tell (mechanical) | Action |
+|-------------------|--------|
+| `> 50 lines` | Split — likely doing too much |
+| `> 2 instance variables of mutable runtime state` (constructor-injected collaborators don't count) | Split — multiple concerns of state mixed |
+| `> 5 public methods` | Split — interface too wide |
+| Method names span 2+ verb domains (e.g. `save*` + `validate*` + `format*`) | Split per domain |
+| You describe it with "and" ("Order **and** invoice generation **and** persistence") | Split per "and" |
+| 2+ stakeholders would request changes to different parts | Split per stakeholder |
+
+**Don't split when:** value object (immutable, behaves as a single concept), Result-type wrapper, true aggregate root.
+
+### Q3: Compose or inherit?
+
+```
+Default: COMPOSE.
+
+Inherit ONLY when ALL three are true:
+1. True "is-a" relationship (a Dog IS-A Animal — survives the substitution test)
+2. Framework requires it (extending Error, EventTarget, Component base class)
+3. Hierarchy ≤ 1 level deep
+
+Otherwise: composition (inject behavior via constructor, use Strategy/Decorator).
+```
+
+If you find yourself adding `instanceof` checks or `if (parent.X) { ... } else { childOnly() }`, the inheritance is wrong — refactor to composition.
+
+### Q4: How to signal failure?
+
+| Failure characteristic | Use |
+|------------------------|-----|
+| Programmer error (bad args, misuse, contract violation) | Throw typed exception (`throw new InvalidEmail()`) |
+| Expected runtime failure (network, validation that consumer routinely handles) | Return `Result` type (`{ ok: boolean, value? error? }`) |
+| Operation may legitimately have no result | Return `null` (NOT `undefined`, NOT a sentinel like `-1`) |
+| Async operation failure | Reject Promise with typed error |
+
+**Never** throw strings. **Never** sometimes-throw-sometimes-return-error. **Never** use `undefined` for documented absence.
+
+### Q5: Refactor now or later?
+
+```
+Are tests covering the code I'm about to refactor?
+├── NO  → STOP. Add characterization tests first. (legacy-code.md)
+└── YES ↓
+    Is the refactor in my path right now (the code I'm working on)?
+    ├── YES → Refactor as Boy Scout improvement
+    └── NO  ↓
+        Is the smell blocking new features or causing bugs?
+        ├── YES → Schedule dedicated session
+        └── NO  → Note it, leave it. YAGNI.
+```
+
+### Q6: Use a design pattern?
+
+```
+Did I recognize the problem? (have I seen this exact shape 2+ times before?)
+├── NO  → Don't force a pattern. Write straight code.
+└── YES ↓
+    Does the pattern make this SIMPLER?
+    ├── NO  → Don't use it. Pattern is overhead, not virtue.
+    └── YES ↓
+        Will the team understand it without explanation?
+        ├── NO  → Use only with comment + reference link
+        └── YES → Apply pattern
+```
+
+**Anti-pattern: Pattern-first design.** Patterns emerge from refactoring, not blueprint.
+
+### Q7: Mock, fake, stub, or real?
+
+| Need | Use |
+|------|-----|
+| Verify a method was called with specific args | **Mock** (`expect(spy).toHaveBeenCalledWith(...)`) |
+| Provide canned return values | **Stub** (returns fixed data) |
+| Substitute a slow/external dependency with a working in-memory version | **Fake** (`InMemoryUserRepo`) |
+| Test pure domain logic | **Real objects** — no doubles |
+| Pass a dependency that's never used | **Dummy** (`{} as Logger`) |
+
+**Default: real objects + fakes for I/O.** Reach for mocks only when verifying interaction is the actual contract (e.g. "ensure email was sent").
+
+### Q8: Does this async path accept and propagate cancellation?
+
+Cancellation is a **discipline concern**, not just an SDK concern — it applies to any backend, worker, or service that does I/O across multiple layers. A request that the caller has abandoned should not keep running, retrying, polling, or holding resources downstream.
+
+```
+Is this an async method that loops, retries, polls, schedules, or awaits I/O?
+├── NO  → No signal needed. (Pure async transforms are exempt — they finish on their own.)
+└── YES ↓
+    Does the caller need to be able to abandon this work mid-flight?
+    (HTTP request handlers: yes — client disconnect.
+     Background jobs: yes — shutdown / reschedule.
+     Long polls / SSE / streams: yes — consumer unsubscribe.
+     Brief CPU-only async chains: no.)
+    ├── NO  → Document why. Stop.
+    └── YES ↓
+        Does the public boundary accept a cancellation token?
+        (`AbortSignal` in JS, `CancellationToken` in C#, `context.Context` in Go,
+         `CancellationToken` in Kotlin coroutines, etc.)
+        ├── NO  → Add it. The signature is part of the contract.
+        └── YES ↓
+            Is the signal forwarded across EVERY layer of `await` between the
+            public boundary and the I/O leaf (network, disk, timer, lock)?
+            Trace the call graph; flag any intermediate function that takes no
+            signal parameter — it silently disables cancellation downstream.
+            ├── NO  → Thread it through. One missing layer = no cancellation.
+            └── YES → Reject/throw at the boundary with the runtime's standard
+                       cancellation error (`AbortError`, `OperationCanceledException`,
+                       `context.Canceled`). Never swallow.
+```
+
+**Tell:** any `async` method (in any language) that loops/retries/polls/awaits and either (a) doesn't accept a cancellation token from its caller, OR (b) accepts one but doesn't forward it to inner awaits, OR (c) implements "timeout" by racing a `setTimeout`/sleep without actually cancelling the underlying work.
+
+**Fix:** make the cancellation token a first-class parameter of every async public method that loops/retries/awaits I/O; thread it through every internal `await` to the I/O leaf; compose multiple sources at the boundary (consumer + internal timeout + shutdown signal). Reject at the boundary with the runtime's standard cancellation error type.
+
+## Core Workflow
+
+### 1. Clarify the requirement (before any code)
+
+- Write the **acceptance criteria** in plain language. If you can't, you don't understand it yet.
+- Identify the **domain concepts**. These become value objects + entities.
+- Identify the **boundaries** — what's "in" the system, what's external?
+
+### 2. Decide TDD or not (decision tree below)
+
+Most production code → TDD. Spike code → no TDD. See Q1 in Decision Trees.
+
+### 3. Write the simplest test that fails (RED)
+
+- Concrete example, not abstract: `"applies 20% discount to premium users"` not `"can apply discount"`
+- Tests behavior, not implementation
+- Arrange-Act-Assert structure
+
+### 4. Write the simplest code to pass (GREEN)
+
+- Hardcode if needed (Fake It). Let next tests force generalization.
+- No abstraction yet. No "what if we need…". Just pass.
+
+### 5. Refactor (REFACTOR — design happens here)
+
+- Look at duplication. Apply Rule of Three (extract on 3rd, not 1st).
+- Apply size limits (see Constraints below).
+- Run review checklist.
+
+### 6. Repeat — RED → GREEN → REFACTOR
+
+When done, run the **full Review Checklist** at the end of this file.
+
 ## Reference Guide
 
 Load detailed guidance based on what you're about to do.
@@ -446,7 +495,8 @@ Load detailed guidance based on what you're about to do.
 - One level of indentation per method (early return for guards)
 - Apply Rule of Three before extracting duplication
 - Inject dependencies via constructor (no `getInstance()`, no static imports of services)
-- Use polymorphism instead of `switch`/`if-else` chains on type discriminators
+- Use polymorphism instead of `switch`/`if-else` chains on type discriminators (exempt: closed protocol-level enums — see Anti-pattern #3)
+- **Propagate cancellation tokens (`AbortSignal` / `CancellationToken` / `context.Context`) through every async path that loops, retries, polls, schedules, or awaits I/O.** Trace the signal across every layer of `await`, not just the I/O leaf — see Q8.
 - Run the Review Checklist before declaring done
 
 ### MUST NOT DO
@@ -460,6 +510,34 @@ Load detailed guidance based on what you're about to do.
 - Use boolean parameters on public methods (split into named methods or options object)
 - Reach across object graphs (`a.b.c.d` — Law of Demeter)
 - Use inheritance for code reuse — compose instead
+- **Mutate `this` or arguments across an `await` boundary on the same logical operation** — extract a pure transform that returns a new value (Anti-pattern #15)
+- Implement "timeout" by racing a sleep without cancelling the underlying work (Q8 / Anti-pattern #15 cousin)
+
+## Behavioral Principles (memorize)
+
+These are the deep rules. Reference them when explaining decisions.
+
+- **Tell, Don't Ask** — Command objects, don't query and decide. The object that has the data has the behavior.
+- **Design by Contract** — Every method has preconditions, postconditions, invariants. Document them via types or asserts.
+- **Hollywood Principle** — "Don't call us, we'll call you." (Inversion of Control / Dependency Injection)
+- **Law of Demeter** — Only talk to immediate friends. One dot per line.
+- **Rule of Three** — Don't extract until the third occurrence. Wrong abstraction is worse than duplication.
+- **YAGNI** — You aren't gonna need it. Don't build for hypothetical futures.
+- **KISS** — Simplest thing that works. Add complexity only when forced by a real requirement.
+- **Boy Scout Rule** — Leave the code better than you found it. Small improvements every visit.
+
+## Output Templates
+
+> **Skip this section if the task is review/audit only.** These templates apply when *implementing* new features or refactoring — they describe a delivery shape (RED-GREEN-REFACTOR + value objects + JSDoc), not a review shape. For pure review tasks, anchor on the Anti-Pattern Gallery + Review Checklist instead.
+
+When implementing a feature, deliver:
+
+1. **Failing test** that describes the new behavior (RED)
+2. **Minimum production code** that passes the test (GREEN)
+3. **Refactored code** with smells eliminated (REFACTOR)
+4. **Value objects** for any domain primitives introduced
+5. **Public methods documented** with JSDoc/equivalent (`@param`, `@returns`, `@throws`, `@example`)
+6. **No dead code** — everything you wrote is reachable from a test or public API
 
 ## Review Checklist (run before declaring done)
 
@@ -486,15 +564,18 @@ Apply this list to every change. If any item is "no" or "not sure", fix before d
 - [ ] No class with > 2 instance variables of *mutable runtime state* (injected collaborators don't count — compose state into a value/structure object if more)
 - [ ] No function with > 3 parameters (parameter object)
 - [ ] No `else` blocks (early returns or polymorphism)
+- [ ] No mutation of `this` or arguments across `await` boundaries on the same logical operation (Anti-pattern #15)
 
 ### Design
 - [ ] Single responsibility per class (passes the "and" test)
 - [ ] Domain concepts wrapped in value objects (no raw primitives)
 - [ ] Logic lives with data (Tell, Don't Ask — no anemic models)
 - [ ] Dependencies injected, not instantiated internally
-- [ ] No `switch`/`if-else` on type discriminator (use polymorphism)
+- [ ] No `switch`/`if-else` on type discriminator (use polymorphism — exempt for closed protocol-level enums)
 - [ ] Composition preferred over inheritance
 - [ ] No cross-object reaches (Law of Demeter — `a.b.c` is suspicious)
+- [ ] Long-running async paths accept and propagate cancellation tokens across every layer (Q8)
+- [ ] Errors are typed with stable `code`; no sometimes-throw-sometimes-return
 
 ### Complexity
 - [ ] No abstractions added "for future flexibility" (YAGNI)
@@ -504,27 +585,3 @@ Apply this list to every change. If any item is "no" or "not sure", fix before d
 
 ### When-not-to-apply override
 - [ ] Confirmed this code is NOT a throwaway / spike / glue (if it is, the rules above relax — see `when-not-to-apply.md`)
-
-## Behavioral Principles (memorize)
-
-These are the deep rules. Reference them when explaining decisions.
-
-- **Tell, Don't Ask** — Command objects, don't query and decide. The object that has the data has the behavior.
-- **Design by Contract** — Every method has preconditions, postconditions, invariants. Document them via types or asserts.
-- **Hollywood Principle** — "Don't call us, we'll call you." (Inversion of Control / Dependency Injection)
-- **Law of Demeter** — Only talk to immediate friends. One dot per line.
-- **Rule of Three** — Don't extract until the third occurrence. Wrong abstraction is worse than duplication.
-- **YAGNI** — You aren't gonna need it. Don't build for hypothetical futures.
-- **KISS** — Simplest thing that works. Add complexity only when forced by a real requirement.
-- **Boy Scout Rule** — Leave the code better than you found it. Small improvements every visit.
-
-## Output Templates
-
-When implementing a feature, deliver:
-
-1. **Failing test** that describes the new behavior (RED)
-2. **Minimum production code** that passes the test (GREEN)
-3. **Refactored code** with smells eliminated (REFACTOR)
-4. **Value objects** for any domain primitives introduced
-5. **Public methods documented** with JSDoc/equivalent (`@param`, `@returns`, `@throws`, `@example`)
-6. **No dead code** — everything you wrote is reachable from a test or public API
