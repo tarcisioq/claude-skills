@@ -68,6 +68,35 @@ Operacionaliza **SOLID + TDD + clean code + refactoring + design patterns + arqu
 
 ---
 
+### [`release-hardening-audit/`](./release-hardening-audit/) — Pre-Publish Security Hardening Audit (draft 0.3.0)
+
+> **Status: pre-shipping draft.** Estrutura completa, references operacionais, workflow interativo — mas ainda sem validação em auditorias reais. Use com olhar crítico e abra issue se a gallery falhar em casos concretos. Vai pra `1.0.0` quando 3+ auditorias reais validarem o workflow ponta a ponta sem feedback de alta severidade.
+
+Auditoria de segurança **pré-publicação** especializada em projetos JS / TS / Node.js. Olha o **artefato e a superfície de release** — o que vai pra CDN, pro npm registry, pro container image — em busca de gaps de hardening que code review tradicional e scan de vulnerabilidade em PR não pegam.
+
+**Caso canônico que motivou a skill:** sourcemap público (`*.js.map`) shipado junto do bundle no CDN. Code review olha a config; `/security-review` ignora config; esta skill pega porque inspeciona o `dist/` real e o pipeline de deploy.
+
+**Quando dispara:** preparar release público (npm package, browser SDK, Node service), PR review em release branch / version bump, project health check pré-deploy de milestone, investigação de leak reportado em produção.
+
+**Diferenciador:** os outros skills do workspace cobrem *como o código é desenhado*; este cobre *o que efetivamente é publicado*. Complementar (não substituto) ao [`/security-review`](https://github.com/anthropics/claude-code-security-review) da Anthropic — aquele faz scan de vuln em código alterado num PR; este faz audit de hardening do artefato.
+
+**Conteúdo:**
+
+- **6 references operacionais** (~200-350 linhas cada) cobrindo build artifacts, distribution config, supply chain, secrets hygiene, CI/CD hardening, tools-and-checks
+- **20 anti-patterns** no SKILL.md com `Tell:` que é um comando shell rodável (`grep`, `find`, `jq`, `npm pack --dry-run`, `curl -I`) — não paráfrase. Cards #11-#14 e #18 (Express defaults: helmet / CORS / cookies / body-limit / trust proxy) carregam **Surface adaptation** inline com analogs explícitos para AWS Lambda + API Gateway, Cloudflare Workers (Hono), Next.js (App Router) e standalone Node `http.createServer` — auditoria de surface non-Express adapta em vez de descartar
+- **Suporte a monorepos** (umbrella + subprojects, npm/pnpm/yarn workspaces, lerna, Nx, Turborepo): Phase 1 roda por subproject, gallery walked per surface, findings com prefixo (`client:B1`, `identify:H4`), aplicação per-subproject em Phase 5
+- **Modelo de severidade release-blocking** (BLOCK / HARDEN / NICE-TO-HAVE) ≠ CVSS — o usuário lê pra decidir o que fazer hoje vs neste sprint
+- **Hard Skip Gate** no topo: refusa em projetos non-JS, em tasks de scan de vuln em código alterado (roteia pra `/security-review`), em spikes/throwaways
+- **Workflow interativo de 6 fases:** Discover (mapeia release surface) → Audit (walk gallery seletivo via tabela surface→entries) → **Present** (decision table + cards detalhados) → **Confirm** (gate explícito: `all` / `block` / `block+harden` / `<ids>` / `none`) → **Apply** (só os findings confirmados; verificação rodada por fix) → **Report** (arquivos modificados com atribuição por finding + remaining user actions + bloco de re-verificação). Nada é aplicado sem confirmação explícita do usuário, nem mesmo BLOCK
+- **Decision factors por finding:** effort (XS/S/M/L com thresholds mecânicos), auto-fix capability (✓ Claude aplica / ⚠ aplica parcial + ação externa do usuário / ✗ só ação externa), external setup (npm OIDC config, Sentry account, secret rotation, etc.) — surfaced no Phase 3 pra o usuário triagear sem ler todo card
+- **Foco em casos humanly hard to spot:** sourcemap com `webpack://` paths mesmo em modo `hidden`, wildcard `define` baking server env-vars no client bundle, `dotenv` em código bundled-pra-browser, postinstall em deps transitivas, `pull_request_target` + checkout untrusted, `package.json` `files` drift, `.d.ts` shipping JSDoc internos
+- **Open-source first** — recomenda `gitleaks`, `osv-scanner`, `retire.js`, `semgrep`, `publint`, `arethetypeswrong`, `source-map-explorer`. SaaS (Snyk, Socket.dev, GitHub Advanced Security) só quando há requisito org-scale documentado
+- **Sample CI workflow** + pre-commit hook + 7-step first-audit runbook prontos pra colar
+
+**Linguagem:** JavaScript / TypeScript / Node.js exclusivamente — gallery e references não generalizam pra Python / Go / Rust. Decisão deliberada pra manter token cost baixo e tells precisos.
+
+---
+
 ### [`vanilla-js-architect/`](./vanilla-js-architect/) — Browser SDKs in Vanilla JavaScript
 
 Designs e implementa **SDKs, bibliotecas e frameworks browser-side** em vanilla JS — com foco em arquitetura, encapsulamento, distribuição (ESM/UMD/IIFE) e suporte cross-runtime.
@@ -183,6 +212,7 @@ Dentro do Claude Code:
 /plugin marketplace add tarcisioq/claude-skills
 /plugin install solid@tarcisio-skills
 /plugin install vanilla-js-architect@tarcisio-skills
+/plugin install release-hardening-audit@tarcisio-skills    # draft 0.3.0
 ```
 
 O `@tarcisio-skills` é o nome do marketplace (declarado em `.claude-plugin/marketplace.json`). Você só precisa adicionar o marketplace uma vez — depois pode listar e instalar skills com:
@@ -208,6 +238,7 @@ A estrutura publicada segue o spec de plugin do Claude Code, então o `SKILL.md`
 ```bash
 npx degit tarcisioq/claude-skills/solid/skills/solid ~/.claude/skills/solid
 npx degit tarcisioq/claude-skills/vanilla-js-architect/skills/vanilla-js-architect ~/.claude/skills/vanilla-js-architect
+npx degit tarcisioq/claude-skills/release-hardening-audit/skills/release-hardening-audit ~/.claude/skills/release-hardening-audit
 ```
 
 Útil em automação (CI, dotfiles managers) ou quando você prefere copiar sem git history. Re-rode para atualizar.
@@ -218,6 +249,7 @@ npx degit tarcisioq/claude-skills/vanilla-js-architect/skills/vanilla-js-archite
 git clone https://github.com/tarcisioq/claude-skills.git
 cp -r claude-skills/solid/skills/solid ~/.claude/skills/solid
 cp -r claude-skills/vanilla-js-architect/skills/vanilla-js-architect ~/.claude/skills/vanilla-js-architect
+cp -r claude-skills/release-hardening-audit/skills/release-hardening-audit ~/.claude/skills/release-hardening-audit
 ```
 
 Útil se você quer todas as skills e pretende contribuir de volta via PR.

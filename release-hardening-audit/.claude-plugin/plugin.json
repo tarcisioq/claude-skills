@@ -1,0 +1,12 @@
+{
+  "name": "release-hardening-audit",
+  "description": "Pre-publish security hardening audit for JavaScript / TypeScript / Node.js projects. Catches non-obvious release-blocking issues that traditional code review misses: sourcemap leakage on CDN, build-time env-var inlining of server secrets, npm publish surface drift (`files` field gaps, types declaration leaks), postinstall risks in transitive deps, GitHub Actions privilege escalation. Workflow is interactive: presents findings as a decision table with effort and auto-fix capability, awaits user confirmation, applies in-repo code fixes, summarizes affected files, and surfaces external actions separately. Complements PR-level vulnerability scanning by focusing on hardening gaps in the shipped artifact rather than code-level vulnerabilities.",
+  "version": "0.3.0",
+  "author": {
+    "name": "tarcisioq",
+    "email": "tarcisioq@gmail.com"
+  },
+  "homepage": "https://github.com/tarcisioq/claude-skills",
+  "repository": "https://github.com/tarcisioq/claude-skills",
+  "license": "MIT"
+}

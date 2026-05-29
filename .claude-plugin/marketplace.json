@@ -19,6 +19,11 @@
       "name": "vanilla-js-architect",
       "source": "./vanilla-js-architect",
       "description": "Designs and implements browser-side SDKs, libraries, and frameworks in vanilla JavaScript. Architecture, encapsulation, distribution (ESM/UMD/IIFE), and cross-runtime support (browsers, Workers, Deno, Bun, Cloudflare Workers). Modern primitives: AbortSignal.any/timeout, Symbol.dispose/using, structuredClone. Ships .d.ts via JSDoc."
+    },
+    {
+      "name": "release-hardening-audit",
+      "source": "./release-hardening-audit",
+      "description": "Pre-publish security hardening audit for JavaScript / TypeScript / Node.js projects. Catches non-obvious release-blocking issues that traditional code review misses: sourcemap leakage on CDN, build-time env-var inlining of server secrets, npm publish surface drift (`files` field gaps, `.d.ts` internal leaks), postinstall risks in transitive deps, GitHub Actions privilege escalation, OIDC vs long-lived `NPM_TOKEN`. Surface-aware: adapts Express idioms (helmet, CORS, cookies, body limits, trust proxy) to AWS Lambda + API Gateway, Cloudflare Workers, Next.js, and standalone Node `http.createServer`. Handles monorepo umbrellas (workspaces, lerna, simple subproject co-location). Complements PR-level vulnerability scanning by focusing on hardening gaps in the shipped artifact rather than code-level vulnerabilities."
     }
   ]
 }
